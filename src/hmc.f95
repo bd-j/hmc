@@ -82,31 +82,31 @@
 
         integer, intent(in) :: ndim, length
         double precision, intent(in) :: epsilon
-        double precision, intent(in), dimension(ndim) :: q
+        double precision, intent(in), dimension(ndim) :: qin
 
         double precision, intent(out), dimension(ndim) :: qprime
         double precision, intent(out) :: lnP
         integer, intent(out) :: accept
 
-        double precision, dimension(ndim) :: p, pin, pprime, qin, gradprime, grad
+        double precision, dimension(ndim) :: p, pin, pprime, q, gradprime, grad
         double precision :: lnP0, r, alpha, dU, dK
-        integer :: j, k, l
+        integer :: i
 
         !initialize random momenta
-        do j = 1, ndim
+        do i = 1, ndim
            call random_number(r)
-           p(j) = r
+           pin(i) = r
         end do
         !find the first gradient and lnp
         call model_lnprob_grad(q, grad)
         call model_lnprob(q, lnP0)
         
         !leap 'length' steps
-        qin = q
-        pin = p
-        do k = 1, length
-           call leapfrog(ndim, epsilon, qin, p, grad, qprime, pprime, gradprime)
-           qin = qprime
+        q = qin
+        p = pin
+        do i = 1, length
+           call leapfrog(ndim, epsilon, q, p, grad, qprime, pprime, gradprime)
+           q = qprime
            p = pprime
            grad = gradprime
         end do
@@ -114,14 +114,14 @@
         call model_lnprob(ndim, q, lnP)
         dU =  lnP0 - lnP !change in potential = negative change in lnP
         dK = 0.0 !change in kinetic
-        do l = 1, ndim
-           dK = dK + 0.5 * (p(l) * p(l)  - pin(l) * pin(l)) 
+        do i = 1, ndim
+           dK = dK + 0.5 * (p(i) * p(i)  - pin(i) * pin(i)) 
         end do
         alpha = exp(-dU - dK)
         call random_number(r)
         accept = 1
         if (r .gt. alpha) then !reject
-           qprime = q
+           qprime = qin
            lnP = lnP0   
            accept = 0
         end if
