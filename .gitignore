@@ -2,3 +2,4 @@
 *.pyc
 junk*
 scratch*
+bin/*
