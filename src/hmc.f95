@@ -36,7 +36,7 @@
         integer, intent(in) :: ndim 
         double precision, intent(in) :: epsilon
         double precision, intent(in), dimension(ndim) :: q, p, grad
-        double precision, intent(out), dimension(ndim) :: qprime, pprime, gradprime
+        double precision, intent(inout), dimension(ndim) :: qprime, pprime, gradprime
 
         pprime = p + epsilon/2. * grad
         qprime = q + epsilon * pprime
@@ -45,7 +45,7 @@
 
       end subroutine
 
-      subroutine hmc_advance(ndim, epsilon, length, q, qprime, lnP, accept)
+      subroutine hmc_advance(ndim, epsilon, length, qin, qprime, lnP, accept)
 
         ! This subroutine advances an HMC sampler by one trajectory
         !
@@ -58,7 +58,7 @@
         ! epsilon [double precision]:
         !   The proposal scale (a tuning parameter). 
         !
-        ! q [double precision (ndim)]:
+        ! qin [double precision (ndim)]:
         !   The starting position in parameter space.
         !
         ! length [integer]:
@@ -68,7 +68,7 @@
         ! Outputs
         ! -------
         !
-        ! qprime [double precision (ndim)]:
+        ! q [double precision (ndim)]:
         !   The final positions in parameter space.
         !
         ! lnP [double precision]:
@@ -84,17 +84,18 @@
         double precision, intent(in) :: epsilon
         double precision, intent(in), dimension(ndim) :: qin
 
-        double precision, intent(out), dimension(ndim) :: qprime
-        double precision, intent(out) :: lnP
-        integer, intent(out) :: accept
+        double precision, intent(inout), dimension(ndim) :: qprime
+        double precision, intent(inout) :: lnP
+        integer, intent(inout) :: accept
 
-        double precision, dimension(ndim) :: p, pin, pprime, q, gradprime, grad
+        double precision, dimension(ndim) :: p, pin, q, pprime, gradprime, grad
         double precision :: lnP0, r, alpha, dU, dK
         integer :: i
 
-        !initialize random momenta
+        !initialize random momenta.  This needs to be a gaussian given the kinetic energy formulation we use
         do i = 1, ndim
-           call random_number(r)
+           call random_normal(r)
+           
            pin(i) = r
         end do
         !find the first gradient and lnp
@@ -108,6 +109,7 @@
            call leapfrog(ndim, epsilon, q, p, grad, qprime, pprime, gradprime)
            q = qprime
            p = pprime
+           !write(*,*) q(:)
            grad = gradprime
         end do
         !probability at the proposed location
@@ -120,12 +122,29 @@
         alpha = exp(-dU - dK)
         call random_number(r)
         accept = 1
-        if (r .gt. alpha) then !reject
+        if (r .gt. alpha) then !reject and reset
            qprime = qin
            lnP = lnP0   
            accept = 0
         end if
 
+      end subroutine
+
+
+      subroutine random_normal(k)
+
+        implicit none
+        double precision, intent(inout) :: k
+        double precision :: s, u, v
+
+        do 
+           call random_number(u)
+           call random_number(v)
+           u = u*2.0d0 - 1.0d0
+           s = u * u + v * v
+           if ((s < 1).and.(s > 0)) exit
+        end do
+        k =  u * sqrt(-2 * log(s) / s)
       end subroutine
 
       ! See: http://gcc.gnu.org/onlinedocs/gfortran/RANDOM_005fSEED.html

@@ -24,7 +24,7 @@
 
         integer, intent(in) :: ndim
         double precision, intent(in), dimension(ndim) :: q
-        double precision, intent(out) :: lnP
+        double precision, intent(inout) :: lnP
 
         integer :: i
 
@@ -49,7 +49,7 @@
         ! ndim [integer]:
         !   The dimension of the parameter space.
         !
-        ! 1 [double precision (ndim)]:
+        ! q [double precision (ndim)]:
         !   The position in parameter space where the probability should
         !   be computed.
         !
@@ -63,7 +63,7 @@
 
         integer, intent(in) :: ndim
         double precision, intent(in), dimension(ndim) :: q
-        double precision, intent(out), dimension(ndim) :: grad
+        double precision, intent(inout), dimension(ndim) :: grad
 
         integer :: i
         
@@ -77,12 +77,13 @@
 
         implicit none
 
-        integer, parameter :: length=20, ndim=2
+        integer, parameter ::length =10, ndim=2
         double precision, dimension(ndim) :: pos
-        double precision :: lp, epsilon = 0.2
-        integer, dimension(length) :: accept
+        double precision :: lp, r, epsilon = 0.5
+        integer :: len
+        !integer, dimension(:) :: accept
 
-        integer :: i, j
+        integer :: i, j, acc
 
         ! First seed the random number generator... don't forget this!
         call init_random_seed ()
@@ -96,13 +97,12 @@
 
 
         ! Run a production chain  of 200 iterations or trajectories.
-        do i=1,200
-          ! You'll notice that I'm overwriting the position and
-          ! log-probability of the ensemble at each step. This works but
-          ! you also have the option of saving the samples by giving
-          ! different input and output arguments.
-          call hmc_advance (ndim,epsilon,length,pos,pos,lp,accept)
-          write(*,*) pos(:), lp
+        do i=1,10000
+          !choose a random length up to 'length'
+          call random_number(r)
+          len = int(r * length)
+          call hmc_advance (ndim,epsilon,len,pos,pos,lp,acc)
+          write(*,*) pos(:), lp, acc
         enddo
 
       end program
