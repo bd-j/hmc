@@ -79,12 +79,12 @@ class BasicHMC(object):
         print('H = {0}, dU = {1}, dK = {2}'.format(alpha, dU, dK))
         
         # Adapt epsilon?
-        if self.traj_num <= self.nadapt and length > 1:
-            epsilon = self.adjust_epsilon(alpha)
-            print(epsilon)
-        elif self.nadapt > 0:
-            epsilon = np.exp(self.logepsbar)
-            self.nadapt = 0
+        #if self.traj_num <= self.nadapt and length > 1:
+        #    epsilon = self.adjust_epsilon(alpha)
+        #    print(epsilon)
+        #elif self.nadapt > 0:
+        #    epsilon = np.exp(self.logepsbar)
+        #    self.nadapt = 0
         # Accept or reject
         if np.random.uniform(0,1) < alpha:
             self.accepted[self.traj_num] = 1
@@ -118,8 +118,8 @@ class BasicHMC(object):
         """Special case of length = 1 trajectories"""
         pass
     
-    def find_reasonable_epsilon(self, theta0, model):
-        epsilon = 1
+    def find_reasonable_epsilon(self, theta0, model, epsilon_guess =1):
+        epsilon = epsilon_guess
         lnP0, grad0 = model.lnprob(theta0), model.lnprob_grad(theta0)
         p0 = np.random.normal(0,1,len(theta0))        
         condition, a = True, 0
@@ -133,7 +133,7 @@ class BasicHMC(object):
             dK = 0.5 * (np.dot(pprime,pprime.T)  - np.dot(p0,p0.T)) #change in kinetic
             alpha = np.exp(-dU - dK)
             if a is 0: #this is the first try
-                a = 2 * (alpha >0.5) - 1 #direction to change epsilon in the future, + or -
+                a = 2 * (alpha >0.5) - 1.0 #direction to change epsilon in the future, + or -
             condition = (alpha**a) > (2**(-a))
             i+=1
             print(i, epsilon, alpha)
@@ -234,7 +234,7 @@ def test_mix_hmc(epsilon = 0.2, length = 10, iterations = 100, snr = 10):
 
     #initialize sampler and sample
     sampler = BasicHMC(model)
-    pos, prob = sampler.sample(theta0, model, iterations = iterations,
+    pos, prob, eps = sampler.sample(theta0, model, iterations = iterations,
                                epsilon = epsilon, length = length, store_trajectories = True)
     print mock_theta/(np.mean(pos, axis=0))
     print('mock_theta = {0}'.format(mock_theta))
@@ -245,7 +245,7 @@ def test_mix_hmc(epsilon = 0.2, length = 10, iterations = 100, snr = 10):
     color = ['red','blue']
     pl.plot(sampler.chain[::10,0], sampler.chain[::10,1], '.', label = 'Thinned samples')
     for it in np.arange(20) + int(iterations/3):
-        pl.plot(sampler.trajectories[:,it,0],sampler.trajectories[:,it,1], color = color[int(sampler.accepted[it])])
+        pl.plot(sampler.trajectories[it,:,0],sampler.trajectories[it,:,1], color = color[int(sampler.accepted[it])])
     pl.plot(mock_theta[0], mock_theta[1], 'g.', markersize = 20, label = 'Truth (noiseless)')
     pl.plot(theta0[0], theta0[1], 'y.', markersize = 10, label = 'Initial')
     pl.legend(loc = 'upper right')
@@ -262,7 +262,7 @@ def test_hmc(epsilon = 0.1, length = 10, iterations = 100):
 
     
     sampler = BasicHMC(model)
-    pos, prob = sampler.sample(theta0.copy(), model, iterations = iterations, epsilon = epsilon, length = length)
+    pos, prob, eps = sampler.sample(theta0.copy(), model, iterations = iterations, epsilon = epsilon, length = length, nadapt =0)
     print (np.std(pos, axis=0))
     print (theta0)
     return sampler
