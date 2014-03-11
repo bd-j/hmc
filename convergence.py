@@ -8,8 +8,8 @@ def gelman_rubin_R(inchains, nsplit = 2):
     n /= nsplit
     print(m,n)
     chains = inchains.reshape(ndim, m, n)
-    B = chains.mean(axis = -1).var(-1)
-    W = chains.var(axis = -1).mean(-1)
+    B = chains.mean(axis = -1).var(-1) #between chain variance
+    W = chains.var(axis = -1).mean(-1) #within chain variance
     print(B,W)
     varhat = (n-1.0)/n * W + 1.0/n * B
     Rhat = np.sqrt(varhat / W)
