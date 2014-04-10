@@ -89,14 +89,14 @@
         call init_random_seed ()
 
         ! Loop over the number of dimensions and initialize each one
-        ! in the range `(0.5, 0.5)`.
+        ! in the range `(-0.5, 0.5)`.
         do i=1,ndim
            call random_number(pos(i))
            pos(i) = pos(i) - 0.5d0
         enddo
 
 
-        ! Run a production chain  of 200 iterations or trajectories.
+        ! Run a production chain  of 10000 iterations or trajectories.
         do i=1,10000
           !choose a random length up to 'length'
           call random_number(r)

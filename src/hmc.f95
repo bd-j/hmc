@@ -25,6 +25,9 @@
         ! qprime [double precision (ndim)]:
         !   The new position in parameter space.
         !
+        ! pprime [double precision (ndim)]:
+        !   The new momentum in parameter space.
+        !
         ! lnP [double precision]:
         !   The value of the log-probability function at positions qprime.
         !
@@ -58,17 +61,17 @@
         ! epsilon [double precision]:
         !   The proposal scale (a tuning parameter). 
         !
-        ! qin [double precision (ndim)]:
-        !   The starting position in parameter space.
-        !
         ! length [integer]:
         !    The number of leapfrog steps to take
+        !
+        ! qin [double precision (ndim)]:
+        !   The starting position in parameter space.
         !
         !
         ! Outputs
         ! -------
         !
-        ! q [double precision (ndim)]:
+        ! qprime [double precision (ndim)]:
         !   The final positions in parameter space.
         !
         ! lnP [double precision]:
@@ -98,13 +101,15 @@
            
            pin(i) = r
         end do
-        !find the first gradient and lnp
-        call model_lnprob_grad(q, grad)
-        call model_lnprob(q, lnP0)
         
         !leap 'length' steps
         q = qin
         p = pin
+
+        !find the first gradient and lnp
+        call model_lnprob_grad(q, grad)
+        call model_lnprob(q, lnP0)
+
         do i = 1, length
            call leapfrog(ndim, epsilon, q, p, grad, qprime, pprime, gradprime)
            q = qprime
@@ -129,7 +134,6 @@
         end if
 
       end subroutine
-
 
       subroutine random_normal(k)
 
