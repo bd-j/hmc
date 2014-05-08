@@ -247,9 +247,13 @@ def test_mix_hmc(epsilon = 0.2, length = 10, iterations = 100, snr = 10):
     for it in np.arange(20) + int(iterations/3):
         pl.plot(sampler.trajectories[it,:,0],sampler.trajectories[it,:,1], color = color[int(sampler.accepted[it])])
     pl.plot(mock_theta[0], mock_theta[1], 'g.', markersize = 20, label = 'Truth (noiseless)')
-    pl.plot(theta0[0], theta0[1], 'y.', markersize = 10, label = 'Initial')
+    pl.plot(theta0[0], theta0[1], 'c.', markersize = 15, label = 'Initial')
     pl.legend(loc = 'upper right')
-    pl.title(r'$\epsilon = ${0}, Length = {1}, $f_{{accept}} =$ {2}'.format(epsilon, length, sampler.accepted.sum()/iterations))
+    pl.title(r'$Z = \theta^T x$, $\theta >0$, $\epsilon = ${0}, Length = {1}, $f_{{accept}} =$ {2}'.format(epsilon, length, sampler.accepted.sum()/iterations))
+    pl.xlabel(r'$\theta_1$')
+    pl.ylabel(r'$\theta_2$')
+    
+
     pl.show()
     return sampler
 
