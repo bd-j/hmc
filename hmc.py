@@ -4,11 +4,11 @@ from numpy import polyval
 
 class BasicHMC(object):
 
-    def __init__(self, model = None, epsilon = None, length = 2, nadapt = 0):
-        pass
+    def __init__(self, verbose = True):
+        self.verbose = verbose
 
-    def sample(self, initial, model, iterations = 1, length = 2, epsilon = None, nadapt = 0,
-               store_trajectories = False):
+    def sample(self, initial, model, iterations = 1, length = 2, epsilon = None,
+               nadapt = 0, store_trajectories = False):
         """Sample for 'iterations' trajectories (i.e., compute that many trajectories,
         resampling the momenta at the end of each trajectory"""
 
@@ -35,7 +35,8 @@ class BasicHMC(object):
             #self.epsilon  = np.random.normal(1.0,1) * self.epsilon
             #epsilon = self.find_reasonable_epsilon(initial.copy(), model)
             
-            print('eps, L = {0}, {1}'.format(epsilon, length))
+            if self.verbose:
+                print('eps, L = {0}, {1}'.format(epsilon, length))
             theta, lnp, grad, epsilon = self.trajectory(theta, model, epsilon, length, lnP0 = lnp, grad0 = grad)
             self.lnprob[i] = lnp
             self.chain[i,:] = theta
@@ -76,7 +77,8 @@ class BasicHMC(object):
         dU =  lnP0 - lnP #change in potential = negative change in lnP
         dK = 0.5 * (np.dot(p,p.T)  - np.dot(p0,p0.T)) #change in kinetic
         alpha = np.exp(-dU - dK) #acceptance criterion
-        print('H = {0}, dU = {1}, dK = {2}'.format(alpha, dU, dK))
+        if self.verbose:
+            print('H = {0}, dU = {1}, dK = {2}'.format(alpha, dU, dK))
         
         # Adapt epsilon?
         #if self.traj_num <= self.nadapt and length > 1:
