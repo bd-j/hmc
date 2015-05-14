@@ -224,7 +224,7 @@ def test_mix_hmc(epsilon = 0.2, length = 10, iterations = 100, snr = 10):
 
     #generate the mock
     mock_theta = np.random.uniform(1, 5, D)
-    print('mock_theta={0}'.format(mock_theta))
+    #print('mock_theta={0}'.format(mock_theta))
     mock = model.model(mock_theta)
     noised_mock = mock * (1 + np.random.normal(0,1, 1)/snr)
     noise = mock/snr
@@ -235,7 +235,7 @@ def test_mix_hmc(epsilon = 0.2, length = 10, iterations = 100, snr = 10):
     theta0 = np.random.uniform(0, 10, D)
 
     #initialize sampler and sample
-    sampler = BasicHMC(model)
+    sampler = BasicHMC(verbose = False)
     pos, prob, eps = sampler.sample(theta0, model, iterations = iterations,
                                epsilon = epsilon, length = length, store_trajectories = True)
     print mock_theta/(np.mean(pos, axis=0))
