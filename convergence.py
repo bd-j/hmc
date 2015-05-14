@@ -31,8 +31,26 @@ def gr_indicator_chain(chain, alpha=0.05):
     
     return R, Rint
 
-def correlation_time(chain):
-    pass
+def correlation_time(chain, window=None, c=10, fast=False):
+    from emcee.autocorr import integrated_time
+    nw, nstep, ndim = chain.shape
+    x = np.mean(chain, axis=0)
+    m = 0
+    if window is None:
+        for m in np.arange(10, nstep):
+            tau = integrated_time(x, axis=0, fast=fast,
+                                   window=m)
+            if np.all(tau * c < m) and np.all(tau > 0):
+                break
+        window = m
+    else:
+        tau = integrated_time(x, axis=0, fast=fast,
+                              window=window)
+        
+    if m == (nstep-1) or (np.any(tau < 0)):
+        raise(ValueError)
+    
+    return tau, window
     
 def raftery_lewis(chain, q, tol=None, p = 0.95):
     pass
