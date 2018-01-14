@@ -1,7 +1,7 @@
 import numpy as np
 
 
-def gr_indicator_chain(chain, alpha=0.05):
+def gr_indicators(chain, alpha=0.05):
     """Calculate the Gelman Rubin indicator of convergence.  Also,
     calculate the interval based indicator presented in Brooks &
     Gelman 1998
@@ -58,3 +58,5 @@ def raftery_lewis(chain, q, tol=None, p = 0.95):
 def heidelberg_welch(chain, alpha):
     pass
 
+def geweke(chain):
+    pass
