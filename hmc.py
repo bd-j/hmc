@@ -9,10 +9,11 @@ class BasicHMC(object):
         self.verbose = verbose
 
     def sample(self, initial, model, iterations=1, length=2, epsilon=None,
-               nadapt=0, store_trajectories=False):
+               nadapt=0, store_trajectories=False, sigma_length=0.0):
         """Sample for `iterations` trajectories (i.e., compute that many
         trajectories, resampling the momenta at the end of each trajectory.
         """
+        self.ndim = len(initial)
         # set some initial values
         self.nadapt = nadapt
         if epsilon is None:
@@ -27,7 +28,7 @@ class BasicHMC(object):
         self.lnprob = np.zeros([iterations])
         self.accepted = np.zeros([iterations])
         if store_trajectories:
-            self.trajectories = np.zeros([iterations, length, len(initial)])
+            self.trajectories = []
         theta = initial.copy()
         self.traj_num = 0
         # loop over trajectories
@@ -35,10 +36,10 @@ class BasicHMC(object):
         for i in xrange(int(iterations)):
             #self.epsilon  = np.random.normal(1.0,1) * self.epsilon
             #epsilon = self.find_reasonable_epsilon(initial.copy(), model)
-
+            ll = int(np.clip(np.round(np.random.normal(length, sigma_length)), 2, np.inf))
             if self.verbose:
-                print('eps, L={0}, {1}'.format(epsilon, length))
-            info = self.trajectory(theta, model, epsilon, length,
+                print('eps, L={0}, {1}'.format(epsilon, ll))
+            info = self.trajectory(theta, model, epsilon, ll,
                                    lnP0=lnp, grad0=grad)
             theta, lnp, grad, epsilon = info
             self.lnprob[i] = info[1]
@@ -53,6 +54,7 @@ class BasicHMC(object):
         steps.  If the trajectories attribute exists, store the
         path of the trajectory."""
 
+        self.trajectories.append(np.zeros([length, self.ndim]))
         # Set up for the run
         # save initial position
         theta = theta0.copy()
@@ -73,7 +75,7 @@ class BasicHMC(object):
             theta, p, grad = self.leapfrog(theta, p, epsilon, grad, model,
                                            check_oob=hasattr(model, 'check_constrained'))
             try:
-                self.trajectories[self.traj_num, step, :] = theta
+                self.trajectories[-1][step, :] = theta
             except:
                 pass
 
