@@ -6,6 +6,17 @@ from numpy import polyval
 class BasicHMC(object):
 
     def __init__(self, model=None, verbose=True):
+        """A basic HMC sampling object.
+
+        :params model:
+            An object with the following methods:
+            * lnprob(theta)
+            * lnprob_grad(theta)
+            * (optional) check_constrained
+
+        :params verbose:
+            bool, print lots of junk?
+        """
         self.verbose = verbose
         self.model = model
         self.has_bounds = hasattr(self.model, 'check_constrained')
@@ -20,7 +31,39 @@ class BasicHMC(object):
                mass_matrix=None, length=10, sigma_length=0.0,
                store_trajectories=False):
         """Sample for `iterations` trajectories (i.e., compute that many
-        trajectories, resampling the momenta at the end of each trajectory.
+        trajectories, resampling the momenta at the end of each trajectory).
+
+        :params initial:
+            The initial position from which to start the sampling.  ndarray of
+            shape (`ndim`,)
+
+        :param iterations:
+            The number of trajectories to compute.  Integer.
+
+        :param epsilon: (optional, default: None)
+            The stepsize for the leapfrog integrator.  Scalar float or ndarray
+            of shape (ndim,). If `None`, a scalar value will be crudely
+            estimated.
+
+        :param mass_matrix: (optional, default: None)
+            "Masses" in each dimension used to rescale the momentum vectors in
+            the HMC trajectories.  Ideally this would be the inverse of the
+            covariance matrix of the posterior PDF. If `None` all masses will be
+            assumed 1.  Otherwise can be ndarray of shape (ndim,) for a
+            diagonal covariance matrix or (ndim, ndim), in which case it must
+            be positive semi-definite.
+
+        :param length:
+            Number of leapfrog steps to take in each trajectory.  Integer.
+
+        :param sigma_length: (optional, default: 0.0)
+            The dispersion in the length of each trajectory.  If greater than
+            zero, the length of each trajectory will be drawn from a gaussian
+            with mean `length` and dispersion `sigma_length`
+
+        :param store_trajectories:
+            If `True`, store not just the endpoints of each trajectory but the
+            steps along each trajectory in a `trajectories` attribute.
         """
         self.ndim = len(initial)
         self.store_trajectories = store_trajectories
@@ -47,21 +90,49 @@ class BasicHMC(object):
         for i in xrange(int(iterations)):
             ll = int(np.clip(np.round(np.random.normal(length, sigma_length)), 2, np.inf))
             if self.verbose:
-                print('eps, L={0}, {1}'.format(epsilon, ll))
+                print('eps={:3.8f}, L={:5.0f}'.format(epsilon, ll))
             info = self.trajectory(theta, epsilon, ll, lnP0=lnp, grad0=grad)
-            theta, lnp, grad, epsilon = info
-            self.lnp[i] = info[1]
-            self.chain[i, :] = info[0]
+            theta, lnp, grad, accepted = info
+            self.lnp[i] = lnp
+            self.chain[i, :] = theta
+            self.accepted[i] = accepted
             self.traj_num += 1
-        return theta, lnp, epsilon
+        return theta, lnp, grad
 
     def trajectory(self, theta0, epsilon, length, lnP0=None, grad0=None):
         """Compute one trajectory for a given starting location, epsilon, and
         length.  The momenta in each direction are drawn from a gaussian before
         performing 'length' leapfrog steps.  If the trajectories attribute
         exists, store the path of the trajectory.
-        """
 
+        :param theta0:
+            Starting position, ndarray of shape (ndim,)
+
+        :param epsilon:
+            Stepsize(s) to use for this trajectory.  scalar float or ndarray of shape (ndim,)
+
+        :param length:
+            The length of this trajectory, integer.
+
+        :param lnP0: optional
+            The lnprob value of the initial position (can be used to save a call to lnprob)
+
+        :param grad0: optional
+            The gradients of the lnprob function at `theta0`, ndarray of shape (ndim,)
+
+        :returns theta:
+            The final position vector, which if the trajectory was not accepted
+            will be equal to the initial position.  ndarray of shape (ndim,)
+
+        :returns lnP:
+            The ln-probability at the final position, float.
+
+        :returns grad:
+            The gradient of the ln-probability at the final position, ndarray of shape (ndim,)
+
+        :returns accepted:
+            Whether the trajectory was accepted (1.0) or not (0.0)
+        """
         if self.store_trajectories:
             self.trajectories.append(np.zeros([length, self.ndim]))
 
@@ -99,10 +170,11 @@ class BasicHMC(object):
             print('H={0}, dU={1}, dK={2}'.format(alpha, dU, dK))
         # Accept or reject
         if np.random.uniform(0, 1) < alpha:
-            self.accepted[self.traj_num] = 1
-            return theta, lnP, grad, epsilon
+            accepted = 1.0
+            return theta, lnP, grad, accepted
         else:
-            return theta0, lnP0, grad0, epsilon
+            accepted = 0.0
+            return theta0, lnP0, grad0, accepted
 
     def leapfrog(self, q, p, epsilon, grad, check_oob=False):
         """Perfrom one leapfrog step, updating the momentum and position
