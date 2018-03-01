@@ -5,95 +5,98 @@ from numpy import polyval
 
 class BasicHMC(object):
 
-    def __init__(self, verbose=True):
+    def __init__(self, model=None, verbose=True):
         self.verbose = verbose
+        self.model = model
+        self.has_bounds = hasattr(self.model, 'check_constrained')
 
-    def sample(self, initial, model, iterations=1, length=2, epsilon=None,
-               nadapt=0, store_trajectories=False, sigma_length=0.0):
+    def lnprob(self, theta):
+        return self.model.lnprob(theta)
+
+    def lnprob_grad(self, theta):
+        return self.model.lnprob_grad(theta)
+
+    def sample(self, initial, iterations=1, epsilon=None,
+               mass_matrix=None, length=10, sigma_length=0.0,
+               store_trajectories=False):
         """Sample for `iterations` trajectories (i.e., compute that many
         trajectories, resampling the momenta at the end of each trajectory.
         """
         self.ndim = len(initial)
+        self.store_trajectories = store_trajectories
+
         # set some initial values
-        self.nadapt = nadapt
+        self.set_mass_matrix(mass_matrix)
         if epsilon is None:
-            epsilon = self.find_reasonable_epsilon(initial.copy(), model)
+            epsilon = self.find_reasonable_stepsize(initial.copy())
             print('using epsilon = {0}'.format(epsilon))
-        self.reset()
-        effective_length = epsilon * length
         self.mu = np.log(10 * epsilon)
 
         # set up the output
-        self.chain = np.zeros([iterations, len(initial)])
-        self.lnprob = np.zeros([iterations])
+        self.reset()
+        self.chain = np.zeros([iterations, self.ndim])
+        self.lnp = np.zeros([iterations])
         self.accepted = np.zeros([iterations])
-        if store_trajectories:
+        if self.store_trajectories:
             self.trajectories = []
+
         theta = initial.copy()
         self.traj_num = 0
         # loop over trajectories
         lnp, grad = None, None  # initial P and lnP are unknown
         for i in xrange(int(iterations)):
-            #self.epsilon  = np.random.normal(1.0,1) * self.epsilon
-            #epsilon = self.find_reasonable_epsilon(initial.copy(), model)
             ll = int(np.clip(np.round(np.random.normal(length, sigma_length)), 2, np.inf))
             if self.verbose:
                 print('eps, L={0}, {1}'.format(epsilon, ll))
-            info = self.trajectory(theta, model, epsilon, ll,
-                                   lnP0=lnp, grad0=grad)
+            info = self.trajectory(theta, epsilon, ll, lnP0=lnp, grad0=grad)
             theta, lnp, grad, epsilon = info
-            self.lnprob[i] = info[1]
+            self.lnp[i] = info[1]
             self.chain[i, :] = info[0]
             self.traj_num += 1
         return theta, lnp, epsilon
 
-    def trajectory(self, theta0, model, epsilon, length, lnP0=None, grad0=None):
-        """Compute one trajectory for a given starting location,
-        epsilon, and length.  The momenta in each direction are
-        drawn from a gaussian before performing 'length' leapfrog
-        steps.  If the trajectories attribute exists, store the
-        path of the trajectory."""
+    def trajectory(self, theta0, epsilon, length, lnP0=None, grad0=None):
+        """Compute one trajectory for a given starting location, epsilon, and
+        length.  The momenta in each direction are drawn from a gaussian before
+        performing 'length' leapfrog steps.  If the trajectories attribute
+        exists, store the path of the trajectory.
+        """
 
-        self.trajectories.append(np.zeros([length, self.ndim]))
-        # Set up for the run
+        if self.store_trajectories:
+            self.trajectories.append(np.zeros([length, self.ndim]))
+
+        #  --- Set up for the run ----
         # save initial position
         theta = theta0.copy()
         # random initial momenta
-        p0 = np.random.normal(0, 1, len(theta0))
+        p0 = self.draw_momentum()
+        # gradient in U at initial position, negative of gradient lnP
         if grad0 is None:
-            # gradient in U at initial position, negative of gradient lnP
-            grad0 = -model.lnprob_grad(theta0)
+            grad0 = -self.lnprob_grad(theta0)
         if lnP0 is None:
-            lnP0 = model.lnprob(theta0)
-        # use initial gradient
-        grad = grad0.copy()
-        # use initial momenta
-        p = p0.copy()
+            lnP0 = self.lnprob(theta0)
+        # use copies of initial momenta and gradient
+        p, grad = p0.copy(), grad0.copy()
 
+        # --- Compute Trajectory ---
         # do 'length' leapfrog steps along the trajectory (and store?)
         for step in xrange(int(length)):
-            theta, p, grad = self.leapfrog(theta, p, epsilon, grad, model,
-                                           check_oob=hasattr(model, 'check_constrained'))
-            try:
+            theta, p, grad = self.leapfrog(theta, p, epsilon, grad,
+                                           check_oob=self.has_bounds)
+            if self.store_trajectories:
                 self.trajectories[-1][step, :] = theta
-            except:
-                pass
 
+        # ---- Accept/Reject ---
         # Odds ratio of the proposed move
-        lnP = model.lnprob(theta)
-        dU = lnP0 - lnP  # change in potential = negative change in lnP
-        dK = 0.5 * (np.dot(p, p.T) - np.dot(p0, p0.T))  # change in kinetic
-        alpha = np.exp(-dU - dK)  # acceptance criterion
+        lnP = self.lnprob(theta)
+        # change in potential = negative change in lnP
+        dU = lnP0 - lnP
+        # change in kinetic
+        dK = self.kinetic_energy(p) - self.kinetic_energy(p0)
+        # acceptance criterion
+        alpha = np.exp(-dU - dK)
         if self.verbose:
             print('H={0}, dU={1}, dK={2}'.format(alpha, dU, dK))
-
-        # Adapt epsilon?
-        #if self.traj_num <= self.nadapt and length > 1:
-        #    epsilon = self.adjust_epsilon(alpha)
-        #    print(epsilon)
-        #elif self.nadapt > 0:
-        #    epsilon = np.exp(self.logepsbar)
-        #    self.nadapt = 0
         # Accept or reject
         if np.random.uniform(0, 1) < alpha:
             self.accepted[self.traj_num] = 1
@@ -101,51 +104,103 @@ class BasicHMC(object):
         else:
             return theta0, lnP0, grad0, epsilon
 
-    def leapfrog(self, theta, p, epsilon, grad, model, check_oob=False):
-        """Perfrom one leapfrog step, updating the momentum and
-        position vectors. This uses one call to the model.lnprob_grad()
-        function, which must be defined. It also performs an optional
-        check on the value of the new position to make sure it satistfies
-        any parameter constraints, for which the check_constrained
-        method of model is called.
+    def leapfrog(self, q, p, epsilon, grad, check_oob=False):
+        """Perfrom one leapfrog step, updating the momentum and position
+        vectors. This uses one call to the model.lnprob_grad() function, which
+        must be defined. It also performs an optional check on the value of the
+        new position to make sure it satistfies any parameter constraints, for
+        which the check_constrained method of model is called.
         """
 
         # half step in p
         p -= 0.5 * epsilon * grad
         # full step in theta
-        theta += epsilon * p
+        q += epsilon * self.velocity(p)
         # check for constraints on theta
         while check_oob:
-            theta, sign, check_oob = model.check_constrained(theta)
+            theta, sign, check_oob = self.model.check_constrained(theta)
             p *= sign  # flip the momentum if necessary
         # compute new gradient in U, which is negative of gradient in lnP
-        grad = -model.lnprob_grad(theta)
+        grad = -self.lnprob_grad(q)
         # another half step in p
         p -= 0.5 * epsilon * grad
-        return theta, p, grad
+        return q, p, grad
+
+    def draw_momentum(self):
+        if self.ndim_mass == 0:
+            p = np.random.normal(0, 1, self.ndim)
+        elif self.ndim_mass == 1:
+            p = np.random.normal(0, self.mass_matrix)
+        else:
+            p = np.random.multivariate_normal(np.zeros(self.ndim), self.mass_matrix)
+        return p
+
+    def velocity(self, p):
+        """Get the velocities
+        """
+        if self.ndim_mass == 0:
+            v = p  # Masses all = 1
+        elif self.ndim_mass == 1:
+            v = self.inverse_mass_matrix * p
+            #v =  p
+        else:
+            #v = np.dot(self.cho_factor, p)
+            v = np.dot(self.inverse_mass_matrix, p)
+        return v
+
+    def kinetic_energy(self, p):
+        """Get the kinetic energy.
+        """
+        if self.ndim_mass == 0:
+            K = np.dot(p, p)
+        elif self.ndim_mass == 1:
+            K = np.dot(p, self.inverse_mass_matrix * p)
+        else:
+            K = np.dot(p.T, np.dot(self.inverse_mass_matrix, p))
+        return 0.5 * K
+
+    def set_mass_matrix(self, mass_matrix=None):
+        """Cache the inverse of the mass matrix, and set a flag for the
+        dimensionality of the mass matrix. Instead of flags that control
+        operation through branch statements, should probably use subclasses for
+        different types of mass matrix.
+        """
+        self.mass_matrix = mass_matrix
+        if mass_matrix is None:
+            self.inverse_mass_matrix = 1
+            self.ndim_mass = 0
+        elif mass_matrix.ndim == 1:
+            self.inverse_mass_matrix = 1. / mass_matrix
+            self.ndim_mass = 1
+        elif mass_matrix.ndim == 2:
+            self.inverse_mass_matrix = np.linalg.inv(mass_matrix)
+            self.ndim_mass = 2
+        print(mass_matrix, self.ndim_mass)
 
     def langevin(self):
         """Special case of length = 1 trajectories"""
-        pass
+        raise(NotImplementedError)
 
-    def find_reasonable_epsilon(self, theta0, model, epsilon_guess=1):
+    def find_reasonable_stepsize(self, q0, epsilon_guess=1):
+        """Estimate a reasonable value of the stepsize
+        """
         epsilon = epsilon_guess
-        lnP0, grad0 = model.lnprob(theta0), model.lnprob_grad(theta0)
-        p0 = np.random.normal(0, 1, len(theta0))
-        condition, a = True, 0
-        i = 0
+        lnP0, grad0 = self.lnprob(q0.copy()), self.lnprob_grad(q0.copy())
+        p0 = self.draw_momentum()
+
+        condition, a, i = True, 0, 0
         while condition:
             p = p0.copy()
             epsilon = 2.**a * epsilon
-            thetaprime, pprime, gradprime = self.leapfrog(theta0.copy(), p, epsilon, grad0,
-                                                          model, check_oob=True)
-            lnP = model.lnprob(thetaprime)
-            # change in potential = negative change in lnP
+            qprime, pprime, gradprime = self.leapfrog(q0.copy(), p, epsilon, grad0,
+                                                      check_oob=self.has_bounds)
+            lnP = self.lnprob(qprime)
+            # change in potential
             dU = lnP0 - lnP
             # change in kinetic
-            dK = 0.5 * (np.dot(pprime, pprime.T) - np.dot(p0, p0.T))
+            dK = self.kinetic_energy(pprime) - self.kinetic_energy(p0)
             alpha = np.exp(-dU - dK)
-            if a is 0:  # this is the first try
+            if a == 0:  # this is the first try
                 a = 2 * (alpha > 0.5) - 1.0  # direction to change epsilon in the future, + or -
             condition = (alpha**a) > (2**(-a))
             i += 1
@@ -158,27 +213,16 @@ class BasicHMC(object):
         # use this to keep track of the trajectory number within the trajectory
         # (for storage)
         self.traj_num = 0
-        self.H_t = 0
-        self.logepsbar = 0
-        self.delta = 0.65
-
-    def adjust_epsilon(self, alpha, gamma=1.0, t0=10, kappa=0.75):
-        t = self.traj_num + 1
-        eta = 1/float(t + t0)
-        self.H_t = (1 - eta) * self.H_t + eta * (self.delta - alpha)
-        logeps = self.mu - np.sqrt(t)/gamma * self.H_t
-        xi = t**(-kappa)
-        self.logepsbar = xi * logeps + (1 - xi) * self.logepsbar
-        return np.exp(logeps)
 
 
 class TestModel(object):
     """A simple correlated normal distribution to sample.
     """
 
-    def __init__(self):
-        self.A = np.asarray([[50.251256, -24.874372],
-                            [-24.874372, 12.562814]])
+    def __init__(self, Sigma=None):
+        if Sigma is None:
+            Sigma = np.array([[1., 1.8], [1.8, 4.]])
+        self.A = np.linalg.inv(Sigma)
         self.has_constraints = False
 
     def lnprob_grad(self, theta):
@@ -256,8 +300,8 @@ def test_mix_hmc(epsilon=0.2, length=10, iterations=100, snr=10):
     theta0 = np.random.uniform(0, 10, D)
 
     #initialize sampler and sample
-    sampler = BasicHMC(verbose=False)
-    pos, prob, eps = sampler.sample(theta0, model, iterations=iterations,
+    sampler = BasicHMC(model, verbose=False)
+    pos, prob, eps = sampler.sample(theta0, iterations=iterations,
                                     epsilon=epsilon, length=length,
                                     store_trajectories=True)
     print mock_theta/(np.mean(pos, axis=0))
@@ -283,15 +327,15 @@ def test_mix_hmc(epsilon=0.2, length=10, iterations=100, snr=10):
     return sampler
 
 
-def test_hmc(epsilon=0.1, length=10, iterations=100):
+def test_hmc(verbose=False, Sigma=None, **sample_kwargs):
     """sample the correlated normal using hmc"""
-    model = TestModel()
+    model = TestModel(Sigma=Sigma)
     D = 2
     theta0 = np.random.normal(0, 1, D)
 
-    sampler = BasicHMC(model)
-    pos, prob, eps = sampler.sample(theta0.copy(), model, iterations=iterations,
-                                    epsilon=epsilon, length=length, nadapt=0)
-    print (np.std(pos, axis=0))
-    print (theta0)
+    sampler = BasicHMC(model, verbose=verbose)
+    pos, prob, eps = sampler.sample(theta0.copy(), **sample_kwargs)
+    print(theta0)
+    print(np.std(sampler.chain, axis=0))
+    print(sampler.accepted.mean())
     return sampler
