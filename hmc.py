@@ -1,6 +1,5 @@
 import numpy as np
 import matplotlib.pyplot as pl
-from numpy import polyval
 
 
 class BasicHMC(object):
@@ -190,7 +189,7 @@ class BasicHMC(object):
         q += epsilon * self.velocity(p)
         # check for constraints on theta
         while check_oob:
-            theta, sign, check_oob = self.model.check_constrained(theta)
+            q, sign, check_oob = self.model.check_constrained(q)
             p *= sign  # flip the momentum if necessary
         # compute new gradient in U, which is negative of gradient in lnP
         grad = -self.lnprob_grad(q)
@@ -298,10 +297,10 @@ class TestModel(object):
         self.has_constraints = False
 
     def lnprob_grad(self, theta):
-        return -np.dot(theta, self.A)
+        return -np.dot(self.A, theta)
 
     def lnprob(self, theta):
-        return 0.5 * np.dot(self.lnprob_grad(theta), theta.T)
+        return 0.5 * np.dot(theta.T, self.lnprob_grad(theta))
 
 
 class MixModel(object):
