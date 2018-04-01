@@ -19,6 +19,7 @@ class BasicHMC(object):
         self.verbose = verbose
         self.model = model
         self.has_bounds = hasattr(self.model, 'check_constrained')
+        self.set_mass_matrix()
 
     def lnprob(self, theta):
         return self.model.lnprob(theta)
@@ -252,7 +253,7 @@ class BasicHMC(object):
         """Special case of length = 1 trajectories"""
         raise(NotImplementedError)
 
-    def find_reasonable_stepsize(self, q0, epsilon_guess=1):
+    def find_reasonable_stepsize(self, q0, epsilon_guess=1.0):
         """Estimate a reasonable value of the stepsize
         """
         epsilon = epsilon_guess
