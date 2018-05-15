@@ -202,13 +202,13 @@ class BasicHMC(object):
         if self.ndim_mass == 0:
             p = np.random.normal(0, 1, self.ndim)
         elif self.ndim_mass == 1:
-            p = np.random.normal(0, self.mass_matrix)
+            p = np.random.normal(0, np.sqrt(self.mass_matrix))
         else:
             p = np.random.multivariate_normal(np.zeros(self.ndim), self.mass_matrix)
         return p
 
     def velocity(self, p):
-        """Get the velocities
+        """Get the velocities given a momentum vector.
         """
         if self.ndim_mass == 0:
             v = p  # Masses all = 1
@@ -221,7 +221,7 @@ class BasicHMC(object):
         return v
 
     def kinetic_energy(self, p):
-        """Get the kinetic energy.
+        """Get the kinetic energy given momenta
         """
         if self.ndim_mass == 0:
             K = np.dot(p, p)
